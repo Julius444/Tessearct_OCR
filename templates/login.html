@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Medical Prescription OCR{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <h2 class="mb-4 text-center">Login</h2>
+            <form method="POST" action="{{ url_for('login') }}">
+                <!-- Flash messages to display errors or success -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <ul class="list-unstyled">
+                            {% for category, message in messages %}
+                                <li class="alert alert-{{ category }}">
+                                    {{ message }}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                {% endwith %}
+
+                <div class="mb-3">
+                    <label for="username" class="form-label">Username</label>
+                    <input type="text" class="form-control" id="username" name="username" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="password" class="form-label">Password</label>
+                    <input type="password" class="form-control" id="password" name="password" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">Login</button>
+            </form>
+
+            <div class="mt-3 text-center">
+                <a href="{{ url_for('register') }}">Don't have an account? Register</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}OCR Results{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="text-primary text-center mb-4">OCR Extraction Results</h1>
+
+    <h3>Annotated Image</h3>
+    <img src="data:image/png;base64,{{ annotated_img }}" alt="Annotated Prescription" class="img-fluid mb-3 border rounded">
+
+    <h3>Extracted Text (Best PSM: {{ best_psm }})</h3>
+    <pre class="bg-light p-3 rounded">{{ extracted_text }}</pre>
+
+    <h3>Detected Medical Info</h3>
+    {% if extracted_info %}
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped">
+            <thead class="table-primary">
+                <tr>
+                    <th>Drug</th>
+                    <th>Dosages</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in extracted_info %}
+                <tr>
+                    <td>{{ item.drug }}</td>
+                    <td>{{ item.dosages | join(', ') if item.dosages else 'N/A' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-muted">No medical info detected.</p>
+    {% endif %}
+
+    <div class="mt-3">
+        <a href="{{ url_for('index') }}" class="btn btn-outline-primary">⬅ Back to Upload</a>
+    </div>
+</div>
+{% endblock %}

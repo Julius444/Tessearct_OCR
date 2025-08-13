@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}
+Register - Medical Prescription OCR
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card">
+                <div class="card-header text-center bg-success text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-user-plus me-2"></i>Create Account
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" id="registrationForm">
+                        <!-- Role Selection -->
+                        <div class="mb-4">
+                            <label class="form-label">Account Type</label>
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="role" id="role_patient" 
+                                               value="patient" {{ 'checked' if request.args.get('role') == 'patient' else '' }}>
+                                        <label class="form-check-label" for="role_patient">
+                                            <i class="fas fa-user-injured me-2"></i>Patient
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="role" id="role_pharmacist" 
+                                               value="pharmacist" {{ 'checked' if request.args.get('role') == 'pharmacist' else '' }}>
+                                        <label class="form-check-label" for="role_pharmacist">
+                                            <i class="fas fa-user-md me-2"></i>Pharmacist
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Password -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="password" class="form-label">Password *</label>
+                                <input type="password" class="form-control" id="password" name="password" required>
+                                <div class="form-text">Minimum 6 characters</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="confirm_password" class="form-label">Confirm Password *</label>
+                                <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+                            </div>
+                        </div>
+                        
+                        <!-- Patient-specific fields -->
+                        <div id="patient_fields" style="display: none;">
+                            <h6 class="text-primary mb-3">Patient Information</h6>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="patient_id" class="form-label">Patient ID</label>
+                                    <input type="text" class="form-control" id="patient_id" name="patient_id">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="insurance_number" class="form-label">Insurance Number</label>
+                                    <input type="text" class="form-control" id="insurance_number" name="insurance_number">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Pharmacist-specific fields -->
+                        <div id="pharmacist_fields" style="display: none;">
+                            <h6 class="text-success mb-3">Pharmacist Information</h6>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="license_number" class="form-label">License Number *</label>
+                                    <input type="text" class="form-control" id="license_number" name="license_number">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="pharmacy_name" class="form-label">Pharmacy Name</label>
+                                    <input type="text" class="form-control" id="pharmacy_name" name="pharmacy_name">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="pharmacy_address" class="form-label">Pharmacy Address</label>
+                                <textarea class="form-control" id="pharmacy_address" name="pharmacy_address" rows="3"></textarea>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="fas fa-user-plus me-2"></i>Create Account
+                        </button>
+                    </form>
+                </div>
+                <div class="card-footer text-center">
+                    <p class="mb-0">Already have an account? 
+                        <a href="{{ url_for('login') }}" class="text-decoration-none">Login here</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const roleRadios = document.querySelectorAll('input[name="role"]');
+    const patientFields = document.getElementById('patient_fields');
+    const pharmacistFields = document.getElementById('pharmacist_fields');
+    
+    function toggleFields() {
+        const selectedRole = document.querySelector('input[name="role"]:checked')?.value;
+        
+        if (selectedRole === 'patient') {
+            patientFields.style.display = 'block';
+            pharmacistFields.style.display = 'none';
+            document.getElementById('license_number').required = false;
+        } else if (selectedRole === 'pharmacist') {
+            patientFields.style.display = 'none';
+            pharmacistFields.style.display = 'block';
+            document.getElementById('license_number').required = true;
+        } else {
+            patientFields.style.display = 'none';
+            pharmacistFields.style.display = 'none';
+        }
+    }
+    
+    roleRadios.forEach(radio => {
+        radio.addEventListener('change', toggleFields);
+    });
+    
+    toggleFields();
+    
+    const password = document.getElementById('password');
+    const confirmPassword = document.getElementById('confirm_password');
+    
+    function validatePassword() {
+        if (password.value !== confirmPassword.value) {
+            confirmPassword.setCustomValidity('Passwords do not match');
+        } else {
+            confirmPassword.setCustomValidity('');
+        }
+    }
+    
+    password.addEventListener('change', validatePassword);
+    confirmPassword.addEventListener('keyup', validatePassword);
+});
+</script>
+{% endblock %}

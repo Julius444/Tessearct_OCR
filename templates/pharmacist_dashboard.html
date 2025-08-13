@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Pharmacist Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3">
+            <div class="sidebar">
+                <nav class="nav flex-column">
+                    <a class="nav-link active" href="{{ url_for('dashboard') }}">
+                        <i class="fas fa-tachometer-alt"></i>Dashboard
+                    </a>
+                    <a class="nav-link" href="{{ url_for('list_prescriptions') }}">
+                        <i class="fas fa-list"></i>All Prescriptions
+                    </a>
+                    <a class="nav-link" href="{{ url_for('list_prescriptions') }}?status=pending">
+                        <i class="fas fa-clock"></i>Pending Approvals
+                    </a>
+                    <a class="nav-link" href="{{ url_for('reports') }}">
+                        <i class="fas fa-chart-bar"></i>Reports
+                    </a>
+                    <a class="nav-link" href="{{ url_for('profile') }}">
+                        <i class="fas fa-user"></i>Profile
+                    </a>
+                </nav>
+            </div>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="col-md-9">
+            <div class="main-content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2>Pharmacist Dashboard</h2>
+                    <div>
+                        <a href="{{ url_for('list_prescriptions') }}?status=pending" class="btn btn-warning">
+                            <i class="fas fa-clock me-2"></i>Pending ({{ stats.pending_prescriptions }})
+                        </a>
+                    </div>
+                </div>
+                
+                <!-- Statistics Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="stats-card bg-warning">
+                            <h3>{{ stats.pending_prescriptions }}</h3>
+                            <p>Pending Prescriptions</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="stats-card bg-success">
+                            <h3>{{ stats.my_approvals }}</h3>
+                            <p>Total Approved by Me</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="stats-card bg-info">
+                            <h3>{{ stats.approved_today }}</h3>
+                            <p>Approved Today</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Pending Prescriptions -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-clock me-2"></i>Pending Prescriptions
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        {% if pending_prescriptions %}
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Prescription #</th>
+                                            <th>Patient</th>
+                                            <th>Upload Date</th>
+                                            <th>Confidence</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for prescription in pending_prescriptions %}
+                                        <tr>
+                                            <td>{{ prescription.prescription_number }}</td>
+                                            <td>{{ prescription.patient.get_full_name() }}</td>
+                                            <td>{{ prescription.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                            <td>
+                                                {% if prescription.ocr_confidence %}
+                                                    <div class="progress" style="height: 20px;">
+                                                        <div class="progress-bar" role="progressbar" 
+                                                             style="width: {{ (prescription.ocr_confidence * 100)|round(1) }}%">
+                                                            {{ (prescription.ocr_confidence * 100)|round(1) }}%
+                                                        </div>
+                                                    </div>
+                                                {% else %}
+                                                    N/A
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <a href="{{ url_for('view_prescription', id=prescription.id) }}" 
+                                                   class="btn btn-sm btn-primary">
+                                                    <i class="fas fa-eye me-1"></i>Review
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-4">
+                                <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                                <h5 class="text-muted">No pending prescriptions</h5>
+                                <p class="text-muted">All prescriptions have been processed</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- My Recent Approvals -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-check-circle me-2"></i>My Recent Approvals
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        {% if my_approvals %}
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Prescription #</th>
+                                            <th>Patient</th>
+                                            <th>Approval Date</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for prescription in my_approvals %}
+                                        <tr>
+                                            <td>{{ prescription.prescription_number }}</td>
+                                            <td>{{ prescription.patient.get_full_name() }}</td>
+                                            <td>{{ prescription.approved_at.strftime('%Y-%m-%d %H:%M') if prescription.approved_at else 'N/A' }}</td>
+                                            <td>
+                                                <span class="status-badge status-{{ prescription.status.value }}">
+                                                    {{ prescription.status.value.title() }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <a href="{{ url_for('view_prescription', id=prescription.id) }}" 
+                                                   class="btn btn-sm btn-primary">
+                                                    <i class="fas fa-eye"></i>
+                                                </a>
+                                                {% if prescription.status.value == 'approved' %}
+                                                    <form method="POST" action="{{ url_for('dispense_prescription', id=prescription.id) }}" 
+                                                          style="display: inline;" onsubmit="return confirm('Mark as dispensed?')">
+                                                        <button type="submit" class="btn btn-sm btn-success ms-1">
+                                                            <i class="fas fa-pills"></i>
+                                                        </button>
+                                                    </form>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-4">
+                                <i class="fas fa-prescription-bottle fa-3x text-muted mb-3"></i>
+                                <h5 class="text-muted">No approvals yet</h5>
+                                <p class="text-muted">Start reviewing pending prescriptions</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

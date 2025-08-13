@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Patient Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3 mb-4">
+            <div class="sidebar bg-light p-3 rounded shadow-sm">
+                <nav class="nav flex-column">
+                    <a class="nav-link active" href="{{ url_for('dashboard') }}">
+                        <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+                    </a>
+                    <a class="nav-link" href="{{ url_for('upload_prescription') }}">
+                        <i class="fas fa-upload me-2"></i> Upload Prescription
+                    </a>
+                    <a class="nav-link" href="{{ url_for('list_prescriptions') }}">
+                        <i class="fas fa-list me-2"></i> My Prescriptions
+                    </a>
+                    <a class="nav-link" href="{{ url_for('profile') }}">
+                        <i class="fas fa-user me-2"></i> Profile
+                    </a>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9">
+            <div class="main-content">
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+                    <h2 class="mb-3 mb-md-0">Welcome, {{ current_user.get_full_name() }}</h2>
+                    <a href="{{ url_for('upload_prescription') }}" class="btn btn-primary">
+                        <i class="fas fa-plus me-2"></i> Upload New Prescription
+                    </a>
+                </div>
+
+                <!-- Statistics Cards -->
+                <div class="row g-3 mb-4">
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="stats-card bg-primary text-white p-3 rounded shadow-sm">
+                            <h3>{{ stats.total_prescriptions }}</h3>
+                            <p class="mb-0">Total Prescriptions</p>
+                        </div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="stats-card bg-warning text-dark p-3 rounded shadow-sm">
+                            <h3>{{ stats.pending }}</h3>
+                            <p class="mb-0">Pending</p>
+                        </div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="stats-card bg-info text-white p-3 rounded shadow-sm">
+                            <h3>{{ stats.approved }}</h3>
+                            <p class="mb-0">Approved</p>
+                        </div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="stats-card bg-success text-white p-3 rounded shadow-sm">
+                            <h3>{{ stats.dispensed }}</h3>
+                            <p class="mb-0">Dispensed</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Prescriptions -->
+                <div class="card shadow-sm">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-prescription-bottle me-2"></i> Recent Prescriptions
+                        </h5>
+                        <a href="{{ url_for('list_prescriptions') }}" class="btn btn-sm btn-outline-primary">
+                            View All
+                        </a>
+                    </div>
+                    <div class="card-body">
+                        {% if prescriptions %}
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>Prescription #</th>
+                                            <th>Upload Date</th>
+                                            <th>Status</th>
+                                            <th>Confidence</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for prescription in prescriptions %}
+                                        <tr>
+                                            <td>{{ prescription.prescription_number }}</td>
+                                            <td>{{ prescription.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                            <td>
+                                                <span class="status-badge status-{{ prescription.status.value if prescription.status else 'unknown' }}">
+                                                    {{ prescription.status.value.title() if prescription.status else 'Unknown' }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                {% if prescription.ocr_confidence %}
+                                                    {% set width_percentage = (prescription.ocr_confidence * 100)|round(1) %}
+                                                    <div class="progress" style="height: 20px;">
+                                                        <div class="progress-bar" 
+                                                             role="progressbar" 
+                                                             style="width: {{ width_percentage ~ '%' }}" 
+                                                             aria-valuenow="{{ width_percentage }}" 
+                                                             aria-valuemin="0" 
+                                                             aria-valuemax="100">
+                                                            {{ width_percentage }}%
+                                                        </div>
+                                                    </div>
+                                                {% else %}
+                                                    N/A
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <a href="{{ url_for('view_prescription', id=prescription.id) }}" 
+                                                   class="btn btn-sm btn-primary">
+                                                    <i class="fas fa-eye"></i>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-4">
+                                <i class="fas fa-prescription-bottle fa-3x text-muted mb-3"></i>
+                                <h5 class="text-muted">No prescriptions yet</h5>
+                                <p class="text-muted">Upload your first prescription to get started</p>
+                                <a href="{{ url_for('upload_prescription') }}" class="btn btn-primary">
+                                    <i class="fas fa-upload me-2"></i> Upload Prescription
+                                </a>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
