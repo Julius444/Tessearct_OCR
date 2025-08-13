@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Medical Prescription OCR{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2 class="text-center">Welcome to the Dashboard</h2>
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4>Welcome, {{ current_user.get_full_name() }}</h4>
+                </div>
+                <div class="card-body">
+                    <p><strong>Email:</strong> {{ current_user.email }}</p>
+                    <p><strong>Role:</strong> {{ current_user.role.value.capitalize() }}</p>
+                    <p><strong>Phone Number:</strong> {{ current_user.phone_number or 'N/A' }}</p>
+                    <p><strong>Last Login:</strong> {{ current_user.last_login or 'N/A' }}</p>
+
+                    <hr>
+
+                    <h5>Prescription Overview</h5>
+                    <p>You have <strong>{{ current_user.prescriptions|length }}</strong> prescriptions.</p>
+                    <a href="C:\Users\ADMIN\Desktop\Tesseract_OCR\templates\prescription.html" class="btn btn-info">View Prescriptions</a>
+
+                    <hr>
+
+                    <h5>Actions</h5>
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('logout') }}" class="btn btn-danger">Logout</a>
+                        <a href="{{ url_for('profile') }}" class="btn btn-secondary">View Profile</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

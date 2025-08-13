@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Prescriptions{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Your Prescriptions</h2>
+
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Prescription Number</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for prescription in prescriptions %}
+            <tr>
+                <td>{{ prescription.prescription_number }}</td>
+                <td>{{ prescription.status.capitalize() }}</td>
+                <td><a href="{{ url_for('view_prescription', id=prescription.id) }}" class="btn btn-info">View</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

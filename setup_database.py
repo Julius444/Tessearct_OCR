@@ -1,227 +1,364 @@
 import os
-import cv2
-import pytesseract
-import base64
-import numpy as np
-import re
-from flask import Flask, request, render_template, redirect, url_for, session, flash, jsonify
-import easyocr
-from PIL import Image, ImageEnhance, ImageFilter
-import difflib
-from collections import Counter
-import uuid
-from werkzeug.utils import secure_filename
-from werkzeug.security import generate_password_hash, check_password_hash
-import json
+import sys
 from datetime import datetime, timedelta
-import logging
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-from enum import Enum
-import sqlite3
-from functools import wraps
+from werkzeug.security import generate_password_hash
 
-# Set up logging
+# Add the parent directory to Python path to import the main app
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from app import app, db, User, Prescription, PrescriptionStatus, UserRole
+import logging
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Flask app setup
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-change-this-in-production'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///medical_prescriptions.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
-
-# Initialize extensions
-db = SQLAlchemy(app)
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
-login_manager.login_message = 'Please log in to access this page.'
-
-# Enums for user roles and prescription status
-class UserRole(Enum):
-    PATIENT = 'patient'
-    PHARMACIST = 'pharmacist'
-    ADMIN = 'admin'
-
-class PrescriptionStatus(Enum):
-    PENDING = 'pending'
-    APPROVED = 'approved'
-    REJECTED = 'rejected'
-    DISPENSED = 'dispensed'
-
-# Database Models
-class User(UserMixin, db.Model):
-    __tablename__ = 'users'
+def create_sample_users():
+    """Create sample users for testing"""
     
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False, index=True)
-    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.PATIENT)
+    # Admin user
+    admin = User(
+        username='admin',
+        email='admin@medscript.com',
+        first_name='System',
+        last_name='Administrator',
+        role=UserRole.ADMIN
+    )
+    admin.set_password('admin123')
     
-    # Personal Information
-    first_name = db.Column(db.String(50), nullable=False)
-    last_name = db.Column(db.String(50), nullable=False)
-    phone_number = db.Column(db.String(20))
-    date_of_birth = db.Column(db.Date)
-    
-    # Patient-specific fields
-    patient_id = db.Column(db.String(20), unique=True, index=True)  # Hospital ID
-    insurance_number = db.Column(db.String(50))
-    emergency_contact = db.Column(db.String(100))
-    
-    # Pharmacist-specific fields
-    license_number = db.Column(db.String(50), unique=True)
-    pharmacy_name = db.Column(db.String(100))
-    pharmacy_address = db.Column(db.Text)
-    
-    # Timestamps
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    last_login = db.Column(db.DateTime)
-    is_active = db.Column(db.Boolean, default=True)
-    email_verified = db.Column(db.Boolean, default=False)
-    
-    # Relationships
-    prescriptions = db.relationship('Prescription', backref='user_patient', lazy=True, 
-                                  foreign_keys='Prescription.patient_id', overlaps="prescriptions,user_patient")
-    approved_prescriptions = db.relationship('Prescription', backref='user_pharmacist', lazy=True,
-                                           foreign_keys='Prescription.pharmacist_id', overlaps="approved_prescriptions,user_pharmacist")
-    
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
-    
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
-    
-    def get_full_name(self):
-        return f"{self.first_name} {self.last_name}"
-    
-    def is_patient(self):
-        return self.role == UserRole.PATIENT
-    
-    def is_pharmacist(self):
-        return self.role == UserRole.PHARMACIST
-    
-    def is_admin(self):
-        return self.role == UserRole.ADMIN
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'username': self.username,
-            'email': self.email,
-            'role': self.role.value,
-            'full_name': self.get_full_name(),
-            'created_at': self.created_at.isoformat(),
-            'is_active': self.is_active
+    # Sample patients
+    patients = [
+        {
+            'username': 'patient1',
+            'email': 'patient1@example.com',
+            'first_name': 'John',
+            'last_name': 'Doe',
+            'phone_number': '+254700123456',
+            'patient_id': 'P001',
+            'insurance_number': 'INS001',
+            'emergency_contact': 'Jane Doe - +254700123457'
+        },
+        {
+            'username': 'patient2',
+            'email': 'patient2@example.com',
+            'first_name': 'Mary',
+            'last_name': 'Smith',
+            'phone_number': '+254700123458',
+            'patient_id': 'P002',
+            'insurance_number': 'INS002',
+            'emergency_contact': 'James Smith - +254700123459'
+        },
+        {
+            'username': 'patient3',
+            'email': 'patient3@example.com',
+            'first_name': 'David',
+            'last_name': 'Kimani',
+            'phone_number': '+254700123460',
+            'patient_id': 'P003',
+            'insurance_number': 'INS003',
+            'emergency_contact': 'Grace Kimani - +254700123461'
         }
-
-class Prescription(db.Model):
-    __tablename__ = 'prescriptions'
+    ]
     
-    id = db.Column(db.Integer, primary_key=True)
-    prescription_number = db.Column(db.String(50), unique=True, nullable=False)
-    patient_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    pharmacist_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    status = db.Column(db.Enum(PrescriptionStatus), default=PrescriptionStatus.PENDING)
-    extracted_text = db.Column(db.Text)
-    ocr_confidence = db.Column(db.Float)
+    # Sample pharmacists
+    pharmacists = [
+        {
+            'username': 'pharmacist1',
+            'email': 'pharmacist1@pharmacy.com',
+            'first_name': 'Dr. Sarah',
+            'last_name': 'Wilson',
+            'phone_number': '+254720123456',
+            'license_number': 'PHARM001',
+            'pharmacy_name': 'City Pharmacy',
+            'pharmacy_address': '123 Kenyatta Avenue, Nairobi'
+        },
+        {
+            'username': 'pharmacist2',
+            'email': 'pharmacist2@pharmacy.com',
+            'first_name': 'Dr. Michael',
+            'last_name': 'Ochieng',
+            'phone_number': '+254720123457',
+            'license_number': 'PHARM002',
+            'pharmacy_name': 'Westlands Pharmacy',
+            'pharmacy_address': '456 Waiyaki Way, Westlands, Nairobi'
+        }
+    ]
     
-    # Add prescriber_name and hospital_name fields
-    prescriber_name = db.Column(db.String(100))
-    hospital_name = db.Column(db.String(100))  # Add hospital_name to the Prescription model
-    
-    patient = db.relationship('User', foreign_keys=[patient_id])  # Reference to the user
-    pharmacist = db.relationship('User', foreign_keys=[pharmacist_id])  # Reference to the pharmacist
-
-    def __repr__(self):
-        return f'<Prescription {self.prescription_number}>'
-
-# Login manager user loader
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
-
-# Routes
-@app.route('/')
-def index():
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
-    return render_template('index.html')
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        try:
-            # Get form data
-            username = request.form.get('username')
-            email = request.form.get('email')
-            password = request.form.get('password')
-            confirm_password = request.form.get('confirm_password')
-            role = request.form.get('role', 'patient')  # Default to 'patient'
-            first_name = request.form.get('first_name')
-            last_name = request.form.get('last_name')
-            phone_number = request.form.get('phone_number')
-
-            # Validation
-            if not all([username, email, password, first_name, last_name]):
-                flash('All required fields must be filled', 'error')
-                return render_template('register.html')
-
-            if password != confirm_password:
-                flash('Passwords do not match', 'error')
-                return render_template('register.html')
-
-            if len(password) < 6:
-                flash('Password must be at least 6 characters long', 'error')
-                return render_template('register.html')
-
-            # Check if user exists
-            if User.query.filter_by(username=username).first():
-                flash('Username already exists', 'error')
-                return render_template('register.html')
-
-            if User.query.filter_by(email=email).first():
-                flash('Email already registered', 'error')
-                return render_template('register.html')
-
-            # Create new user
-            user = User(
-                username=username,
-                email=email,
-                first_name=first_name,
-                last_name=last_name,
-                phone_number=phone_number,
-                role=UserRole.PATIENT if role == 'patient' else UserRole.PHARMACIST
-            )
-
-            # Role-specific fields
-            if role == 'patient':
-                user.patient_id = request.form.get('patient_id')
-                user.insurance_number = request.form.get('insurance_number')
-            elif role == 'pharmacist':
-                user.license_number = request.form.get('license_number')
-                user.pharmacy_name = request.form.get('pharmacy_name')
-                user.pharmacy_address = request.form.get('pharmacy_address')
-
-            user.set_password(password)
-
-            db.session.add(user)
-            db.session.commit()
-
-            flash('Registration successful! Please log in.', 'success')
-            return redirect(url_for('login'))
+    try:
+        # Add admin
+        if not User.query.filter_by(username='admin').first():
+            db.session.add(admin)
+            logger.info("Added admin user")
         
-        except Exception as e:
-            logger.error(f"Registration error: {e}")
-            db.session.rollback()
-            flash('Registration failed. Please try again.', 'error')
-    
-    return render_template('register.html')
+        # Add patients
+        for patient_data in patients:
+            if not User.query.filter_by(username=patient_data['username']).first():
+                patient = User(**patient_data, role=UserRole.PATIENT)
+                patient.set_password('password123')
+                db.session.add(patient)
+                logger.info(f"Added patient: {patient_data['username']}")
+        
+        # Add pharmacists
+        for pharmacist_data in pharmacists:
+            if not User.query.filter_by(username=pharmacist_data['username']).first():
+                pharmacist = User(**pharmacist_data, role=UserRole.PHARMACIST)
+                pharmacist.set_password('password123')
+                db.session.add(pharmacist)
+                logger.info(f"Added pharmacist: {pharmacist_data['username']}")
+        
+        db.session.commit()
+        logger.info("Sample users created successfully")
+        
+    except Exception as e:
+        logger.error(f"Error creating sample users: {e}")
+        db.session.rollback()
+        raise
 
-# Additional routes (login, logout, dashboard, etc.) ...
+def create_sample_prescriptions():
+    """Create sample prescription data for testing"""
+    
+    try:
+        # Get sample users
+        patient1 = User.query.filter_by(username='patient1').first()
+        patient2 = User.query.filter_by(username='patient2').first()
+        patient3 = User.query.filter_by(username='patient3').first()
+        pharmacist1 = User.query.filter_by(username='pharmacist1').first()
+        pharmacist2 = User.query.filter_by(username='pharmacist2').first()
+        
+        if not all([patient1, patient2, patient3, pharmacist1, pharmacist2]):
+            logger.error("Sample users not found. Please create users first.")
+            return
+        
+        sample_prescriptions = [
+            {
+                'patient': patient1,
+                'extracted_text': """
+                REPUBLIC OF KENYA
+                KENYATTA NATIONAL HOSPITAL
+                
+                Patient: John Doe
+                Age: 35
+                Date: 15/08/2025
+                
+                Rx:
+                1. Amoxicillin 500mg tablets
+                   Take 1 tablet three times daily for 7 days
+                
+                2. Paracetamol 500mg tablets
+                   Take 1-2 tablets every 6 hours as needed for pain
+                
+                3. ORS sachets
+                   Mix 1 sachet in 1 liter of clean water
+                   Take as needed for dehydration
+                
+                Doctor: Dr. James Mwangi
+                """,
+                'prescriber_name': 'Dr. James Mwangi',
+                'hospital_name': 'Kenyatta National Hospital',
+                'ocr_confidence': 0.89,
+                'status': PrescriptionStatus.APPROVED,
+                'pharmacist': pharmacist1,
+                'patient_notes': 'Feeling unwell with stomach issues'
+            },
+            {
+                'patient': patient2,
+                'extracted_text': """
+                NAIROBI HOSPITAL
+                
+                Patient: Mary Smith
+                Age: 28
+                Date: 14/08/2025
+                
+                Diagnosis: Hypertension
+                
+                Treatment:
+                1. Amlodipine 5mg tablets
+                   Take 1 tablet once daily in the morning
+                
+                2. Hydrochlorothiazide 25mg tablets
+                   Take 1 tablet once daily
+                
+                3. Continue for 3 months and review
+                
+                Dr. Susan Wanjiku
+                """,
+                'prescriber_name': 'Dr. Susan Wanjiku',
+                'hospital_name': 'Nairobi Hospital',
+                'ocr_confidence': 0.92,
+                'status': PrescriptionStatus.DISPENSED,
+                'pharmacist': pharmacist2,
+                'patient_notes': 'Regular blood pressure medication refill'
+            },
+            {
+                'patient': patient3,
+                'extracted_text': """
+                GERTRUDE'S CHILDREN'S HOSPITAL
+                
+                Patient: David Kimani
+                Age: 8
+                Date: 16/08/2025
+                
+                Diagnosis: Upper Respiratory Tract Infection
+                
+                Rx:
+                1. Azithromycin suspension 200mg/5ml
+                   Give 5ml once daily for 3 days
+                
+                2. Salbutamol inhaler
+                   2 puffs twice daily as needed
+                
+                3. Plenty of fluids and rest
+                
+                Dr. Peter Kiprotich
+                """,
+                'prescriber_name': 'Dr. Peter Kiprotich',
+                'hospital_name': "Gertrude's Children's Hospital",
+                'ocr_confidence': 0.85,
+                'status': PrescriptionStatus.PENDING,
+                'pharmacist': None,
+                'patient_notes': 'Child has been coughing for 3 days'
+            },
+            {
+                'patient': patient1,
+                'extracted_text': """
+                RIFT VALLEY PROVINCIAL HOSPITAL
+                
+                Patient: John Doe
+                Age: 35
+                Date: 13/08/2025
+                
+                Diagnosis: Malaria
+                
+                Treatment:
+                1. Coartem tablets (Artemether/Lumefantrine)
+                   Take as per package instructions for 3 days
+                
+                2. Paracetamol 500mg
+                   Take 1-2 tablets every 8 hours for fever
+                
+                3. Return if no improvement in 3 days
+                
+                Dr. Grace Mutindi
+                """,
+                'prescriber_name': 'Dr. Grace Mutindi',
+                'hospital_name': 'Rift Valley Provincial Hospital',
+                'ocr_confidence': 0.78,
+                'status': PrescriptionStatus.REJECTED,
+                'pharmacist': pharmacist1,
+                'rejection_reason': 'Prescription image unclear, please provide better quality scan'
+            },
+            {
+                'patient': patient2,
+                'extracted_text': """
+                MATER HOSPITAL
+                
+                Patient: Mary Smith
+                Age: 28
+                Date: 17/08/2025
+                
+                Diagnosis: Urinary Tract Infection
+                
+                Rx:
+                1. Ciprofloxacin 500mg tablets
+                   Take 1 tablet twice daily for 7 days
+                
+                2. Drink plenty of water
+                3. Complete the full course even if feeling better
+                
+                Dr. Ahmed Hassan
+                """,
+                'prescriber_name': 'Dr. Ahmed Hassan',
+                'hospital_name': 'Mater Hospital',
+                'ocr_confidence': 0.94,
+                'status': PrescriptionStatus.PENDING,
+                'pharmacist': None,
+                'patient_notes': 'Experiencing burning sensation'
+            }
+        ]
+        
+        for i, prescription_data in enumerate(sample_prescriptions):
+            # Generate unique prescription number
+            prescription_number = f"RX{datetime.now().strftime('%Y%m%d')}{str(i+1).zfill(3)}"
+            
+            # Create base prescription
+            prescription = Prescription(
+                prescription_number=prescription_number,
+                patient_id=prescription_data['patient'].id,
+                extracted_text=prescription_data['extracted_text'],
+                prescriber_name=prescription_data['prescriber_name'],
+                hospital_name=prescription_data['hospital_name'],
+                ocr_confidence=prescription_data['ocr_confidence'],
+                ocr_method='tesseract_sample',
+                status=prescription_data['status'],
+                patient_notes=prescription_data.get('patient_notes', ''),
+                uploaded_at=datetime.now() - timedelta(days=i),
+                structured_data='{"medications": ["Amoxicillin", "Paracetamol"], "full_text": "sample prescription"}'
+            )
+            
+            # Set pharmacist and dates based on status
+            if prescription_data['status'] in [PrescriptionStatus.APPROVED, PrescriptionStatus.DISPENSED, PrescriptionStatus.REJECTED]:
+                prescription.pharmacist_id = prescription_data['pharmacist'].id
+                prescription.processed_at = datetime.now() - timedelta(days=i-1)
+                
+                if prescription_data['status'] == PrescriptionStatus.APPROVED:
+                    prescription.approved_at = datetime.now() - timedelta(days=i-1)
+                elif prescription_data['status'] == PrescriptionStatus.DISPENSED:
+                    prescription.approved_at = datetime.now() - timedelta(days=i-1)
+                    prescription.dispensed_at = datetime.now() - timedelta(days=i-1, hours=2)
+                elif prescription_data['status'] == PrescriptionStatus.REJECTED:
+                    prescription.rejection_reason = prescription_data.get('rejection_reason', '')
+            
+            db.session.add(prescription)
+            logger.info(f"Added sample prescription: {prescription_number}")
+        
+        db.session.commit()
+        logger.info("Sample prescriptions created successfully")
+        
+    except Exception as e:
+        logger.error(f"Error creating sample prescriptions: {e}")
+        db.session.rollback()
+        raise
+
+def setup_database():
+    """Main function to set up the database"""
+    
+    with app.app_context():
+        try:
+            # Create all tables
+            logger.info("Creating database tables...")
+            db.create_all()
+            logger.info("Database tables created successfully")
+            
+            # Create sample users
+            logger.info("Creating sample users...")
+            create_sample_users()
+            
+            # Create sample prescriptions
+            logger.info("Creating sample prescriptions...")
+            create_sample_prescriptions()
+            
+            logger.info("Database setup completed successfully!")
+            
+            # Print login credentials
+            print("\n" + "="*50)
+            print("DATABASE SETUP COMPLETED!")
+            print("="*50)
+            print("\nSample Login Credentials:")
+            print("-" * 30)
+            print("Admin:")
+            print("  Username: admin")
+            print("  Password: admin123")
+            print("\nPatients:")
+            print("  Username: patient1, patient2, patient3")
+            print("  Password: password123")
+            print("\nPharmacists:")
+            print("  Username: pharmacist1, pharmacist2")
+            print("  Password: password123")
+            print("\nDatabase file: medical_prescriptions.db")
+            print("="*50)
+            
+        except Exception as e:
+            logger.error(f"Database setup failed: {e}")
+            raise
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    setup_database()
